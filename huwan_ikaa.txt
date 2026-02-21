@@ -1,0 +1,177 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- [BẢO MẬT] Key: ChiiHaudz
+local obfuscated_key = {67, 104, 105, 105, 72, 97, 117, 100, 122} 
+local function get_key(bytes)
+    local k = ""
+    for i = 1, #bytes do k = k .. string.char(bytes[i]) end
+    return k
+end
+
+local CorrectKey = get_key(obfuscated_key)
+local HasKey = false
+_G.AutoFarmChest = false
+_G.IsTeleporting = false
+_G.FarmSpeed = 150 -- Tốc độ quét Map tối ưu
+
+local TweenService = game:GetService("TweenService")
+local CurrentTween = nil
+
+-- Hàm Server Hop (Tối ưu tìm Server nhanh)
+local function ServerHop()
+    Rayfield:Notify({Title = "QUÉT MAP HOÀN TẤT", Content = "Không còn rương! Đang đổi Server mới...", Duration = 5})
+    local HttpService = game:GetService("HttpService")
+    local TeleportService = game:GetService("TeleportService")
+    local PlaceId = game.PlaceId
+    pcall(function()
+        local Servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+        local Target = Servers.data[math.random(1, #Servers.data)]
+        if Target and Target.id ~= game.JobId then
+            TeleportService:TeleportToPlaceInstance(PlaceId, Target.id)
+        end
+    end)
+end
+
+-- Hàm Bay (Tween cực mượt)
+local function TweenTo(targetCFrame)
+    local char = game.Players.LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root then
+        if CurrentTween then CurrentTween:Cancel() end 
+        local distance = (root.Position - targetCFrame.Position).Magnitude
+        local duration = distance / _G.FarmSpeed
+        local info = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+        CurrentTween = TweenService:Create(root, info, {CFrame = targetCFrame})
+        CurrentTween:Play()
+        return CurrentTween
+    end
+end
+
+-- HÀM QUÉT RƯƠNG SIÊU CẤP: Tìm mọi rương ẩn/hiện trên toàn bộ Map
+local function GetChest()
+    local target = nil
+    local minDist = math.huge
+    local playerChar = game.Players.LocalPlayer.Character
+    if not playerChar or not playerChar:FindFirstChild("HumanoidRootPart") then return nil end
+    local pos = playerChar.HumanoidRootPart.Position
+
+    -- Quét toàn bộ rương ẩn sâu trong các Folder địa hình
+    local allParts = game.Workspace:GetDescendants()
+    for i = 1, #allParts do
+        local v = allParts[i]
+        if v:IsA("BasePart") and string.find(v.Name, "Chest") then
+            -- Bỏ qua rương không có tiền (rương đã mở)
+            if v:FindFirstChild("TouchInterest") or v.Transparency < 1 then
+                local dist = (v.Position - pos).Magnitude
+                if dist < minDist then
+                    minDist = dist
+                    target = v
+                end
+            end
+        end
+    end
+    return target
+end
+
+-- LOGIC CHÍNH: QUÉT SẠCH MAP - KHÔNG NGHỈ
+function doFarmChest()
+    task.spawn(function()
+        Rayfield:Notify({Title = "BẮT ĐẦU QUÉT", Content = "Đang tìm rương trên toàn bộ bản đồ...", Duration = 3})
+        while _G.AutoFarmChest do
+            task.wait() 
+            
+            pcall(function()
+                local player = game.Players.LocalPlayer
+                local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                
+                if root then
+                    local targetChest = GetChest()
+                    
+                    if targetChest then
+                        _G.IsTeleporting = true
+                        -- Bay đến phía trên rương một chút để tránh kẹt sàn
+                        TweenTo(targetChest.CFrame * CFrame.new(0, 3, 0))
+                        
+                        -- Vòng lặp nhặt: Chạm là đi tiếp ngay
+                        while targetChest and targetChest.Parent and _G.AutoFarmChest do
+                            if (targetChest.Position - root.Position).Magnitude < 15 then
+                                break -- Đã nhặt, tìm rương tiếp theo ngay lập tức
+                            end
+                            task.wait()
+                        end
+                    else
+                        -- ĐÃ QUÉT HẾT TOÀN BỘ RƯƠNG TRÊN MAP HIỆN TẠI
+                        _G.IsTeleporting = false
+                        if CurrentTween then CurrentTween:Cancel() end
+                        ServerHop()
+                        task.wait(10) -- Chờ dịch chuyển
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- Noclip Safe (Xuyên mọi vật thể)
+game:GetService("RunService").Stepped:Connect(function()
+    pcall(function()
+        local char = game.Players.LocalPlayer.Character
+        if char and (_G.AutoFarmChest or _G.IsTeleporting) then
+            for _, v in pairs(char:GetDescendants()) do
+                if v:IsA("BasePart") then v.CanCollide = false end
+            end
+        end
+    end)
+end)
+
+--- GIAO DIỆN ---
+local Window = Rayfield:CreateWindow({
+   Name = "🏴‍☠️ Chii Hauu HUB | WORLD SCANNER",
+   LoadingTitle = "Hệ Thống Quét Rương Toàn Cầu",
+   LoadingSubtitle = "by Chii Hauu",
+   KeySystem = false, 
+   Keybind = "LeftControl"
+})
+
+local MainTab = Window:CreateTab("💰 Quét Rương")
+
+MainTab:CreateInput({
+   Name = "Xác Minh Key",
+   PlaceholderText = "Key: ChiiHaudz",
+   Callback = function(Text)
+      if Text == CorrectKey then 
+         HasKey = true 
+         Rayfield:Notify({Title = "XÁC MINH XONG", Content = "Chào Chii Hauu, hệ thống đã sẵn sàng!", Duration = 5})
+      end
+   end,
+})
+
+MainTab:CreateToggle({
+   Name = "Kích Hoạt Quét Toàn Map + Auto Hop",
+   CurrentValue = false,
+   Callback = function(Value)
+      if HasKey then
+         _G.AutoFarmChest = Value
+         if Value then 
+            doFarmChest() 
+         else
+            if CurrentTween then CurrentTween:Cancel() end
+            _G.IsTeleporting = false
+         end
+      else
+         Rayfield:Notify({Title = "LỖI", Content = "Hãy nhập Key để sử dụng!", Duration = 5})
+      end
+   end,
+})
+
+MainTab:CreateSection("Trạng Thái Quét")
+MainTab:CreateLabel("Phạm vi: Toàn bộ Map (Workspace Descendants)")
+MainTab:CreateLabel("Tốc độ: 150 km/h (Liên tục)")
+
+MainTab:CreateButton({
+   Name = "🛑 Tắt Script",
+   Callback = function()
+      _G.AutoFarmChest = false
+      Rayfield:Destroy()
+   end,
+})
